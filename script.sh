@@ -22,8 +22,9 @@ DEFAULT_NS=${4}
 #----------------------------------------------------------------
 
 # Prepare Root CA diretories
-mkdir -p ca/root-ca/private ca/root-ca/db crl certs
+mkdir -p ca/root-ca/private ca/root-ca/db crl certs keystores
 chmod 700 ca/root-ca/private
+chmod 700 keystores
 
 # Prepare Root CA database
 cp /dev/null ca/root-ca/db/root-ca.db
@@ -138,20 +139,52 @@ openssl ca \
 
 
 #----------------------------------------------------------------
-# Keystores
+# Truststores
 #----------------------------------------------------------------
 
-# create directories
-mkdir -p keystores
-chmod 700 keystores
+keytool \
+  -import \
+  -file ca/root-ca.crt \
+  -alias rootca \
+  -noprompt \
+  -keystore keystores/truststore.jks \
+  -storepass ${DEFAULT_PW}
+
+
+keytool \
+  -importkeystore \
+  -srckeystore keystores/truststore.jks \
+  -srcstorepass ${DEFAULT_PW} \
+  -srcstoretype jks \
+  -destkeystore keystores/truststore.p12 \
+  -deststorepass ${DEFAULT_PW} \
+  -deststoretype pkcs12
+
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  base64 \
+    -b 0 \
+    -i keystores/truststore.jks \
+    -o keystores/truststore.jks.b64
+else
+  base64 \
+    -w 0 \
+    -i keystores/truststore.jks \
+    -o keystores/truststore.jks.b64
+fi
+
+
+#----------------------------------------------------------------
+# Keystores
+#----------------------------------------------------------------
 
 openssl pkcs12 \
   -export \
   -aes256 \
   -in certs/${DEFAULT_SERVER}.crt \
   -inkey certs/${DEFAULT_SERVER}.key \
-  -out keystores/keystore.p12 \
-  -passout pass:${DEFAULT_PW}-ks \
+  -out keystores/keystore.${DEFAULT_SERVER}.p12 \
+  -passout pass:${DEFAULT_PW} \
   -CAfile ca/signing-ca-chain.pem \
   -chain \
   -caname signingca \
@@ -161,12 +194,24 @@ openssl pkcs12 \
 keytool \
   -importkeystore \
   -srcalias ${DEFAULT_SERVER} \
-  -srckeypass ${DEFAULT_PW}-ks \
-  -srckeystore keystores/keystore.p12 \
-  -srcstorepass ${DEFAULT_PW}-ks \
-  -srcstoretype PKCS12 \
+  -srckeypass ${DEFAULT_PW} \
+  -srckeystore keystores/keystore.${DEFAULT_SERVER}.p12 \
+  -srcstorepass ${DEFAULT_PW} \
+  -srcstoretype pkcs12 \
   -destalias ${DEFAULT_SERVER} \
-  -destkeypass ${DEFAULT_PW}-ks \
-  -destkeystore keystores/keystore.jks \
-  -deststorepass ${DEFAULT_PW}-ks \
-  -deststoretype JKS
+  -destkeypass ${DEFAULT_PW} \
+  -destkeystore keystores/keystore.${DEFAULT_SERVER}.jks \
+  -deststorepass ${DEFAULT_PW} \
+  -deststoretype jks
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  base64 \
+    -b 0 \
+    -i keystores/keystore.${DEFAULT_SERVER}.jks \
+    -o keystores/keystore.${DEFAULT_SERVER}.jks.b64
+else
+  base64 \
+    -w 0 \
+    -i keystores/keystore.${DEFAULT_SERVER}.jks \
+    -o keystores/keystore.${DEFAULT_SERVER}.jks.b64
+fi
